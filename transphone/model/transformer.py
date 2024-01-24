@@ -181,37 +181,25 @@ class TransformerG2P(nn.Module):
         device = next(self.parameters()).device
 
         src = x.view(1, -1)
-        print("src", src.size())
         num_tokens = src.shape[1]
-        print("n_tok", num_tokens)
         src_mask = torch.zeros(
             size=(num_tokens, num_tokens), dtype=torch.bool, device=device
         )
 
         encoder_hidden_states = self.encode(src, src_mask)
-        print("ehs", encoder_hidden_states.size())
 
         max_len = num_tokens + 5
         ys = torch.ones(1, 1, device=device, dtype=torch.long)
         for _ in range(max_len - 1):
-            print("ys", ys.size())
             tgt_mask = generate_square_subsequent_mask(ys.size(1), device=device).bool()
             out = self.decode(ys, encoder_hidden_states, tgt_mask)
-            print("out", out.size())
             prob = self.generator(out[:, -1, :])
-            print("p", prob.size())
             next_token_id = prob.argmax(dim=-1)
 
             ys = torch.cat([ys, next_token_id.reshape(1, 1)], dim=1)
-            print(ys.size())
-            print("ysl", ys)
-            print(tgt_mask)
             if next_token_id == EOS_IDX:
                 break
-        print(ys.size())
-        print(ys)
         out = ys.squeeze(0).tolist()[1:]
-        print(out)
         if out[-1] == 1:
             out = out[:-1]
 
