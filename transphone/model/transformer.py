@@ -2,6 +2,7 @@ import math
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Transformer
 
@@ -50,10 +51,14 @@ class PositionalEncoding(nn.Module):
         self.register_buffer("pos_embedding", pos_embedding)
 
     def forward(self, token_embeddings: Tensor):
-        n_tokens = token_embeddings.size(1)
-        positioned_embeddings = token_embeddings + self.pos_embedding[
-            :n_tokens, :
-        ].view_as(token_embeddings)
+        device = token_embeddings.device
+        batch_size, n_tokens, _ = token_embeddings.size()
+        position_ids = torch.arange(
+            n_tokens, dtype=torch.long, device=device).repeat(batch_size, 1)
+        # TODO Getting rid of the squeeze would require changing the pretrained weights, 
+        # and thus break back-compat...
+        position_embeddings = F.embedding(position_ids, weight=self.pos_embedding.squeeze(1))
+        positioned_embeddings = token_embeddings + position_embeddings
         positioned_embeddings = self.dropout(positioned_embeddings)
         return positioned_embeddings
 
@@ -176,11 +181,11 @@ class TransformerG2P(nn.Module):
 
         return loss
 
-    def inference(self, x):
+    def inference(self, src):
         self.eval()
         device = next(self.parameters()).device
 
-        src = x.view(1, -1)
+        src = src.view(1, -1)
         num_tokens = src.shape[1]
         src_mask = torch.zeros(
             size=(num_tokens, num_tokens), dtype=torch.bool, device=device
@@ -189,12 +194,12 @@ class TransformerG2P(nn.Module):
         encoder_hidden_states = self.encode(src, src_mask)
 
         max_len = num_tokens + 5
-        ys = torch.ones(1, 1, device=device, dtype=torch.long)
+        ys = torch.full(size=(1, 1), fill_value=BOS_IDX, device=device, dtype=torch.long)
         for _ in range(max_len - 1):
             tgt_mask = generate_square_subsequent_mask(ys.size(1), device=device).bool()
             out = self.decode(ys, encoder_hidden_states, tgt_mask)
-            prob = self.generator(out[:, -1, :])
-            next_token_id = prob.argmax(dim=-1)
+            probs = self.generator(out[:, -1, :])
+            next_token_id = probs.argmax(dim=-1)
 
             ys = torch.cat([ys, next_token_id.reshape(1, 1)], dim=1)
             if next_token_id == EOS_IDX:
@@ -205,59 +210,42 @@ class TransformerG2P(nn.Module):
 
         return out
 
-    def inference_batch(self, x):
+    def inference_batch(self, src):
         self.eval()
-
-        # (T,B)
-        # src = x.transpose(0, 1)
-
-        # (B, t)
-        src = x
-
-        # num_tokens = src.shape[0]
-        # batch_size = src.shape[1]
+        device = next(self.parameters()).device
 
         num_tokens = src.shape[1]
         batch_size = src.shape[0]
 
-        src_mask = (
-            (torch.zeros(num_tokens, num_tokens))
-            .type(torch.bool)
-            .to(TransphoneConfig.device)
+        src_mask = torch.zeros(
+            size=(num_tokens, num_tokens),
+            dtype=torch.bool, device=device
         )
         max_len = num_tokens + 5
 
-        memory = self.encode(src, src_mask)
-        ys = x.new_ones(batch_size, 1).fill_(BOS_IDX).type(torch.long)
+        encoder_hidden_states = self.encode(src, src_mask)
 
-        is_done = [False] * batch_size
+        ys = src.new_ones(batch_size, 1).fill_(BOS_IDX)
+        is_done = torch.zeros(size=(batch_size,), device=device)
+        for _ in range(max_len - 1):
+            tgt_mask = generate_square_subsequent_mask(ys.size(1), device=device).bool()
+            out = self.decode(ys, encoder_hidden_states, tgt_mask)
 
-        for i in range(max_len - 1):
-            memory = memory.to(TransphoneConfig.device)
-            tgt_mask = (
-                generate_square_subsequent_mask(ys.size(1)).type(torch.bool)
-            ).to(TransphoneConfig.device)
-            out = self.decode(ys, memory, tgt_mask)
-            out = out.transpose(0, 1)
+            probs = self.generator(out[:, -1, :])
+            # (B,)
+            next_words = probs.argmax(dim=-1)
+            
+            
+            is_done[(next_words == EOS_IDX)] = 1
+            next_words[is_done == 1] = EOS_IDX
 
-            prob = self.generator(out[:, -1])
+            ys = torch.cat([ys, next_words.unsqueeze(1)], dim=1)
 
-            _, next_words = torch.max(prob, dim=-1)
-
-            for j in range(batch_size):
-                if next_words[j].item() == EOS_IDX:
-                    is_done[j] = True
-
-                if is_done[j]:
-                    next_words[j] = EOS_IDX
-
-            ys = torch.cat([ys, next_words.unsqueeze(0)], dim=1)
-
-            if all(is_done):
+            if is_done.all():
                 break
 
         outs = []
-        for y in ys.transpose(0, 1).tolist():
+        for y in ys.tolist():
             outs.append([i for i in y if i >= 2])
 
         return outs
