@@ -6,7 +6,7 @@ editdistance
 requests
 tqdm
 pyyaml
-phonepiece
+phonepiece @ git+https://github.com/LennartKeller/phonepiece
 epitran
 unidecode
 mecab-python3
