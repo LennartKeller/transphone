@@ -196,7 +196,7 @@ class TransformerG2P(nn.Module):
         max_len = num_tokens + 5
         ys = torch.full(size=(1, 1), fill_value=BOS_IDX, device=device, dtype=torch.long)
         for _ in range(max_len - 1):
-            tgt_mask = generate_square_subsequent_mask(ys.size(1), device=device).bool()
+            tgt_mask = self.transformer.generate_square_subsequent_mask(ys.size(1), device=device).bool()
             out = self.decode(ys, encoder_hidden_states, tgt_mask)
             probs = self.generator(out[:, -1, :])
             next_token_id = probs.argmax(dim=-1)
@@ -204,7 +204,7 @@ class TransformerG2P(nn.Module):
             ys = torch.cat([ys, next_token_id.reshape(1, 1)], dim=1)
             if next_token_id == EOS_IDX:
                 break
-        out = ys.squeeze(0).tolist()[1:]
+        out = ys.squeeze(0)[1:]
         if out[-1] == 1:
             out = out[:-1]
 
@@ -228,7 +228,7 @@ class TransformerG2P(nn.Module):
         ys = src.new_ones(batch_size, 1).fill_(BOS_IDX)
         is_done = torch.zeros(size=(batch_size,), device=device)
         for _ in range(max_len - 1):
-            tgt_mask = generate_square_subsequent_mask(ys.size(1), device=device).bool()
+            tgt_mask = self.transformer.generate_square_subsequent_mask(ys.size(1), device=device).bool()
             out = self.decode(ys, encoder_hidden_states, tgt_mask)
 
             probs = self.generator(out[:, -1, :])
@@ -243,9 +243,10 @@ class TransformerG2P(nn.Module):
 
             if is_done.all():
                 break
+        return ys
 
-        outs = []
-        for y in ys.tolist():
-            outs.append([i for i in y if i >= 2])
+        # outs = []
+        # for y in ys.tolist():
+        #     outs.append([i for i in y if i >= 2])
 
-        return outs
+        # return outs

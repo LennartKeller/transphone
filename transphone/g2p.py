@@ -1,27 +1,26 @@
-from phonepiece.lang import normalize_lang_id
-from transphone.model.checkpoint_utils import torch_load
-from transphone.model.transformer import TransformerG2P
-from transphone.model.ensemble import ensemble
-from transphone.bin.download_model import download_model
-from transphone.config import TransphoneConfig
-from transphone.model.checkpoint_utils import find_topk_models
-from transphone.model.vocab import Vocab
-from transphone.model.utils import read_model_config
-from transphone.utils import Singleton
-from phonepiece.lang import read_tree
-from phonepiece.inventory import read_inventory
+from itertools import groupby
 from pathlib import Path
+
 import torch
 import unidecode
-from itertools import groupby
-from transphone.model.utils import resolve_model_name
+from phonepiece.inventory import read_inventory
+from phonepiece.lang import normalize_lang_id, read_tree
+
+from transphone.bin.download_model import download_model
+from transphone.config import TransphoneConfig
+from transphone.model.checkpoint_utils import find_topk_models, torch_load
+from transphone.model.ensemble import ensemble
+from transphone.model.transformer import TransformerG2P
+from transphone.model.utils import read_model_config, resolve_model_name
+from transphone.model.vocab import Vocab
+from transphone.utils import Singleton
 
 
 def read_g2p(model_name='latest', device=None, checkpoint=None):
 
     if device is not None:
         if isinstance(device, str):
-            assert device in ['cpu', 'cuda']
+            assert device in ['cpu', 'cuda', 'onnx']
             TransphoneConfig.device = device
         elif isinstance(device, int):
             if device == -1:
@@ -104,9 +103,12 @@ class G2P(metaclass=Singleton):
         NUM_DECODER_LAYERS = config.num_decoder
 
         torch.manual_seed(0)
+        if TransphoneConfig.device != "onnx":
+            self.model = TransformerG2P(NUM_ENCODER_LAYERS, NUM_DECODER_LAYERS, EMB_SIZE,
+                                NHEAD, SRC_VOCAB_SIZE, TGT_VOCAB_SIZE, FFN_HID_DIM).to(TransphoneConfig.device)
+        else:
+            ...
 
-        self.model = TransformerG2P(NUM_ENCODER_LAYERS, NUM_DECODER_LAYERS, EMB_SIZE,
-                            NHEAD, SRC_VOCAB_SIZE, TGT_VOCAB_SIZE, FFN_HID_DIM).to(TransphoneConfig.device)
 
         torch_load(self.model, self.checkpoint)
 
