@@ -21,7 +21,9 @@ class TokenEmbedding(nn.Module):
 class PositionalEncoding(nn.Module):
     def __init__(self, emb_size: int, dropout: float, maxlen: int = 5000):
         super(PositionalEncoding, self).__init__()
-        den = torch.exp(-torch.arange(0, emb_size, 2) * math.log(torch.tensor(10000)) / emb_size)
+        den = torch.exp(
+            -torch.arange(0, emb_size, 2) * math.log(torch.tensor(10000)) / emb_size
+        )
         pos = torch.arange(0, maxlen).reshape(maxlen, 1)
         pos_embedding = torch.zeros((maxlen, emb_size))
         pos_embedding[:, 0::2] = torch.sin(pos * den)
@@ -34,11 +36,14 @@ class PositionalEncoding(nn.Module):
     def forward(self, token_embeddings: torch.Tensor) -> torch.Tensor:
         device = token_embeddings.device
         batch_size, n_tokens, _ = token_embeddings.size()
-        position_ids = torch.arange(
-            n_tokens, dtype=torch.long, device=device).repeat(batch_size, 1)
-        # TODO Getting rid of the squeeze would require changing the pretrained weights, 
+        position_ids = torch.arange(n_tokens, dtype=torch.long, device=device).repeat(
+            batch_size, 1
+        )
+        # TODO Getting rid of the squeeze would require changing the pretrained weights,
         # and thus break back-compat...
-        position_embeddings = F.embedding(position_ids, weight=self.pos_embedding.squeeze(1))
+        position_embeddings = F.embedding(
+            position_ids, weight=self.pos_embedding.squeeze(1)
+        )
         positioned_embeddings = token_embeddings + position_embeddings
         positioned_embeddings = self.dropout(positioned_embeddings)
         return positioned_embeddings
@@ -72,9 +77,15 @@ class JitTransformerG2P(nn.Module):
             batch_first=True,
         )
         self.generator = nn.Linear(emb_size, tgt_vocab_size)
-        self.src_tok_emb = torch.jit.trace(TokenEmbedding(src_vocab_size, emb_size), torch.randint(1, 400, size=(1, 5)))
-        self.tgt_tok_emb = torch.jit.trace(TokenEmbedding(tgt_vocab_size, emb_size), torch.randint(1, 400, size=(1, 5)))
-        self.positional_encoding = torch.jit.trace(PositionalEncoding(emb_size, dropout=dropout), torch.randn(1, 5, emb_size))
+        self.src_tok_emb = torch.jit.trace(
+            TokenEmbedding(src_vocab_size, emb_size), torch.randint(1, 400, size=(1, 5))
+        )
+        self.tgt_tok_emb = torch.jit.trace(
+            TokenEmbedding(tgt_vocab_size, emb_size), torch.randint(1, 400, size=(1, 5))
+        )
+        self.positional_encoding = torch.jit.trace(
+            PositionalEncoding(emb_size, dropout=dropout), torch.randn(1, 5, emb_size)
+        )
 
         self.criterion = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)
 
@@ -82,7 +93,7 @@ class JitTransformerG2P(nn.Module):
         self.EOS_IDX = EOS_IDX
         self.PAD_IDX = PAD_IDX
         self.UNK_IDX = UNK_IDX
-    
+
     def forward(
         self,
         src: torch.Tensor,
@@ -106,7 +117,7 @@ class JitTransformerG2P(nn.Module):
             memory_key_padding_mask,
         )
         return self.generator(outs)
-    
+
     @torch.jit.export
     def encode(self, src: torch.Tensor, src_mask: torch.Tensor) -> torch.Tensor:
         return self.transformer.encoder(
@@ -114,11 +125,13 @@ class JitTransformerG2P(nn.Module):
         )
 
     @torch.jit.export
-    def decode(self, tgt: torch.Tensor, memory: torch.Tensor, tgt_mask: torch.Tensor)-> torch.Tensor:
+    def decode(
+        self, tgt: torch.Tensor, memory: torch.Tensor, tgt_mask: torch.Tensor
+    ) -> torch.Tensor:
         return self.transformer.decoder(
             self.positional_encoding(self.tgt_tok_emb(tgt)), memory, tgt_mask
         )
-    
+
     @torch.jit.export
     def transcribe(self, grapheme_ids: torch.Tensor) -> torch.Tensor:
         device = grapheme_ids.device
@@ -127,8 +140,7 @@ class JitTransformerG2P(nn.Module):
         batch_size = grapheme_ids.shape[0]
 
         mask = torch.zeros(
-            size=(num_tokens, num_tokens),
-            dtype=torch.bool, device=device
+            size=(num_tokens, num_tokens), dtype=torch.bool, device=device
         )
         max_len = num_tokens + 5
 
@@ -137,14 +149,15 @@ class JitTransformerG2P(nn.Module):
         ys = grapheme_ids.new_ones(batch_size, 1).fill_(self.BOS_IDX)
         is_done = torch.zeros(size=(batch_size,), device=device)
         for _ in range(max_len - 1):
-            tgt_mask = self.transformer.generate_square_subsequent_mask(ys.size(1), device=device).to(torch.bool)
+            tgt_mask = self.transformer.generate_square_subsequent_mask(
+                ys.size(1), device=device
+            ).to(torch.bool)
             out = self.decode(ys, encoder_hidden_states, tgt_mask)
 
             probs = self.generator(out[:, -1, :])
             # (B,)
             next_words = probs.argmax(dim=-1)
-            
-            
+
             is_done[(next_words == self.EOS_IDX)] = 1
             next_words[is_done == 1] = self.EOS_IDX
 
@@ -153,4 +166,3 @@ class JitTransformerG2P(nn.Module):
             if is_done.all():
                 break
         return ys
-
