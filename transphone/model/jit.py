@@ -158,7 +158,7 @@ class JitTransformerG2P(nn.Module):
             # (B,)
             next_words = probs.argmax(dim=-1)
 
-            is_done[(next_words == self.EOS_IDX)] = 1
+            is_done[next_words == self.EOS_IDX] = 1
             next_words[is_done == 1] = self.EOS_IDX
 
             ys = torch.cat([ys, next_words.unsqueeze(1)], dim=1)
