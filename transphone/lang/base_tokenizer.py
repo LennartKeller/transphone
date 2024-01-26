@@ -1,6 +1,8 @@
 from phonepiece.inventory import read_inventory
-from transphone.g2p import read_g2p
+
 from transphone.config import TransphoneConfig
+from transphone.g2p import read_g2p
+
 
 class BaseTokenizer:
 
@@ -51,6 +53,9 @@ class BaseTokenizer:
         raise NotImplementedError
 
     def tokenize_words(self, text:str):
+        """
+        UNUSED
+        """
         text = text.translate(str.maketrans('', '', self.punctuation)).lower()
 
         words = text.split()

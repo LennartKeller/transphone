@@ -10,27 +10,27 @@ from transphone.bin.download_model import download_model
 from transphone.config import TransphoneConfig
 from transphone.model.checkpoint_utils import find_topk_models, torch_load
 from transphone.model.ensemble import ensemble
+from transphone.model.jit import JitTransformerG2P
 from transphone.model.transformer import TransformerG2P
 from transphone.model.utils import read_model_config, resolve_model_name
 from transphone.model.vocab import Vocab
 from transphone.utils import Singleton
 
 
-def read_g2p(model_name='latest', device=None, checkpoint=None):
+def read_g2p(model_name='latest', device="cpu", checkpoint=None):
 
     if device is not None:
         if isinstance(device, str):
             assert device in ['cpu', 'cuda', 'onnx']
-            TransphoneConfig.device = device
         elif isinstance(device, int):
             if device == -1:
-                TransphoneConfig.device = 'cpu'
+                device = 'cpu'
             else:
-                TransphoneConfig.device = f'cuda:{device}'
+                device = f'cuda:{device}'
 
         else:
             assert isinstance(device, torch.device)
-            TransphoneConfig.device = device.type
+            device = device.type
 
     model_name = resolve_model_name(model_name)
     cache_path = None
@@ -57,14 +57,14 @@ def read_g2p(model_name='latest', device=None, checkpoint=None):
 
     config = read_model_config(model_name)
 
-    model = G2P(checkpoint, cache_path, config)
+    model = G2P(checkpoint, cache_path, config, device)
 
     return model
 
 
 class G2P(metaclass=Singleton):
 
-    def __init__(self, checkpoint, cache_path, config):
+    def __init__(self, checkpoint, cache_path, config, device):
 
         self.model_path = Path(checkpoint).parent
         self.grapheme_vocab = Vocab.read(self.model_path / 'grapheme.vocab')
@@ -72,6 +72,7 @@ class G2P(metaclass=Singleton):
         self.config = config
         self.checkpoint = checkpoint
         self.cache_path = cache_path
+        self.device = device
 
         # setup available languages
         self.supervised_langs = []
@@ -103,14 +104,20 @@ class G2P(metaclass=Singleton):
         NUM_DECODER_LAYERS = config.num_decoder
 
         torch.manual_seed(0)
-        if TransphoneConfig.device != "onnx":
+        if self.device != "onnx":
+            self.onnx_ = False
             self.model = TransformerG2P(NUM_ENCODER_LAYERS, NUM_DECODER_LAYERS, EMB_SIZE,
-                                NHEAD, SRC_VOCAB_SIZE, TGT_VOCAB_SIZE, FFN_HID_DIM).to(TransphoneConfig.device)
+                                NHEAD, SRC_VOCAB_SIZE, TGT_VOCAB_SIZE, FFN_HID_DIM).to(self.device)
+            torch_load(self.model, self.checkpoint)
         else:
-            ...
+            self.onnx_ = True
+            self.device = "cpu"
+            _model = JitTransformerG2P(NUM_ENCODER_LAYERS, NUM_DECODER_LAYERS, EMB_SIZE,
+                                NHEAD, SRC_VOCAB_SIZE, TGT_VOCAB_SIZE, FFN_HID_DIM).to(self.device)
+            torch_load(_model, self.checkpoint)
+            self.model = torch.jit.script(_model)
 
-
-        torch_load(self.model, self.checkpoint)
+        
 
 
     def get_target_langs(self, lang_id, num_lang=10, verbose=False, force_approximate=False):
@@ -158,11 +165,17 @@ class G2P(metaclass=Singleton):
                             grapheme_ids.append(self.grapheme_vocab.atoi(roman))
                     continue
                 grapheme_ids.append(self.grapheme_vocab.atoi(grapheme))
+            
+            if not self.onnx_:
+                x = torch.LongTensor(grapheme_ids, device=self.device).unsqueeze(0)
 
-            x = torch.LongTensor(grapheme_ids).unsqueeze(0).to(TransphoneConfig.device)
-
-            phone_ids = self.model.inference(x)
-
+                phone_ids = self.model.inference(x)
+            else:
+                x = torch.LongTensor(grapheme_ids, device=self.device).reshape(1, -1)
+                phone_ids = self.model.transcribe(x).view(-1).tolist()
+                # Filter out special tokens
+                phone_ids = [p_id for p_id in phone_ids if p_id > 1]
+                
             phones = [self.phoneme_vocab.itoa(phone) for phone in phone_ids]
 
             # ignore empty
@@ -231,12 +244,15 @@ class G2P(metaclass=Singleton):
             if verbose:
                 print(f"normalized: {word} -> {normalized_graphemes}")
 
-        x = torch.LongTensor(grapheme_input).to(TransphoneConfig.device)
+        x = torch.LongTensor(grapheme_input, device=self.device)
+        if not self.onnx_:
+            phone_output = self.model.inference_batch(x).tolist()
+        else:
+            phone_output = self.model.transcribe(x).tolist()
 
-        phone_output = self.model.inference_batch(x)
 
         for target_lang_id, phone_ids in zip(target_langs, phone_output):
-            phones = [self.phoneme_vocab.itoa(phone) for phone in phone_ids]
+            phones = [self.phoneme_vocab.itoa(phone) for phone in phone_ids if phone > 1]
 
             # ignore empty
             if len(phones) == 0:

@@ -244,9 +244,3 @@ class TransformerG2P(nn.Module):
             if is_done.all():
                 break
         return ys
-
-        # outs = []
-        # for y in ys.tolist():
-        #     outs.append([i for i in y if i >= 2])
-
-        # return outs
