@@ -133,37 +133,37 @@ class JitTransformerG2P(nn.Module):
         )
 
     @torch.jit.export
-    @torch.no_grad
     def transcribe(self, grapheme_ids: torch.Tensor) -> torch.Tensor:
-        device = grapheme_ids.device
+        with torch.no_grad():
+            device = grapheme_ids.device
 
-        num_tokens = grapheme_ids.shape[1]
-        batch_size = grapheme_ids.shape[0]
+            num_tokens = grapheme_ids.shape[1]
+            batch_size = grapheme_ids.shape[0]
 
-        mask = torch.zeros(
-            size=(num_tokens, num_tokens), dtype=torch.bool, device=device
-        )
-        max_len = num_tokens + 5
+            mask = torch.zeros(
+                size=(num_tokens, num_tokens), dtype=torch.bool, device=device
+            )
+            max_len = num_tokens + 5
 
-        encoder_hidden_states = self.encode(grapheme_ids, mask)
+            encoder_hidden_states = self.encode(grapheme_ids, mask)
 
-        ys = grapheme_ids.new_ones(batch_size, 1).fill_(self.BOS_IDX)
-        is_done = torch.zeros(size=(batch_size,), device=device)
-        for _ in range(max_len - 1):
-            tgt_mask = self.transformer.generate_square_subsequent_mask(
-                ys.size(1), device=device
-            ).to(torch.bool)
-            out = self.decode(ys, encoder_hidden_states, tgt_mask)
+            ys = grapheme_ids.new_ones(batch_size, 1).fill_(self.BOS_IDX)
+            is_done = torch.zeros(size=(batch_size,), device=device)
+            for _ in range(max_len - 1):
+                tgt_mask = self.transformer.generate_square_subsequent_mask(
+                    ys.size(1), device=device
+                ).to(torch.bool)
+                out = self.decode(ys, encoder_hidden_states, tgt_mask)
 
-            probs = self.generator(out[:, -1, :])
-            # (B,)
-            next_words = probs.argmax(dim=-1)
+                probs = self.generator(out[:, -1, :])
+                # (B,)
+                next_words = probs.argmax(dim=-1)
 
-            is_done[next_words == self.EOS_IDX] = 1
-            next_words[is_done == 1] = self.EOS_IDX
+                is_done[next_words == self.EOS_IDX] = 1
+                next_words[is_done == 1] = self.EOS_IDX
 
-            ys = torch.cat([ys, next_words.unsqueeze(1)], dim=1)
+                ys = torch.cat([ys, next_words.unsqueeze(1)], dim=1)
 
-            if is_done.all():
-                break
-        return ys
+                if is_done.all():
+                    break
+            return ys
