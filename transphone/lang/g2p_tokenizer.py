@@ -3,22 +3,21 @@ from phonepiece.lexicon import read_lexicon
 from transphone.lang.base_tokenizer import BaseTokenizer
 
 
-def read_g2p_tokenizer(lang_id, g2p_model='latest', device=None):
+def read_g2p_tokenizer(lang_id, g2p_model="latest", device=None):
     lang_id = normalize_lang_id(lang_id)
     return G2PTokenizer(lang_id, g2p_model, device)
 
+
 class G2PTokenizer(BaseTokenizer):
 
-    def __init__(self, lang_id, g2p_model='latest', device=None):
-        super().__init__(lang_id, g2p_model, device)
+    def __init__(self, lang_id, g2p_model="latest", device=None, jit=True):
+        super().__init__(lang_id, g2p_model, device, jit)
 
         self.lexicon = read_lexicon(lang_id)
 
-
-
     def tokenize(self, text, use_g2p=True, use_space=False, verbose=False):
 
-        norm_text = text.translate(str.maketrans('', '', self.punctuation)).lower()
+        norm_text = text.translate(str.maketrans("", "", self.punctuation)).lower()
         log = f"normalization: {text} -> {norm_text}"
         self.logger.info(log)
 
@@ -51,6 +50,6 @@ class G2PTokenizer(BaseTokenizer):
                 self.add_cache(word, remapped_phonemes)
                 result.extend(remapped_phonemes)
             if use_space:
-                result.append('<SPACE>')
+                result.append("<SPACE>")
 
         return result

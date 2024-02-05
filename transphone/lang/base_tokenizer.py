@@ -6,14 +6,14 @@ from transphone.g2p import read_g2p
 
 class BaseTokenizer:
 
-    def __init__(self, lang_id, g2p_model='latest', device=None):
+    def __init__(self, lang_id, g2p_model="latest", device=None, jit=True):
         self.lang_id = lang_id
         self.inventory = read_inventory(lang_id)
 
         if g2p_model is None:
             self.g2p = None
         else:
-            self.g2p = read_g2p(g2p_model, device)
+            self.g2p = read_g2p(g2p_model, device, jit)
 
         # cache for g2p
         self.cache = {}
@@ -24,11 +24,11 @@ class BaseTokenizer:
         if self.g2p is not None and self.g2p.cache_path is not None:
             lang_cache_path = self.g2p.cache_path / f"{lang_id}.txt"
             if lang_cache_path.exists():
-                for line in open(lang_cache_path, 'r'):
+                for line in open(lang_cache_path, "r"):
                     fields = line.strip().split()
                     self.cache[fields[0]] = fields[1:]
 
-        self.punctuation = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~0123456789'
+        self.punctuation = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~0123456789"
         self.logger = TransphoneConfig.logger
 
     def add_cache(self, word, phonemes):
@@ -42,8 +42,12 @@ class BaseTokenizer:
         self.cache_log[word] = phonemes
 
         # flash them to disk if the cache is large enough
-        if len(self.cache_log) >= 100 and self.g2p.cache_path is not None and self.g2p.cache_path.exists():
-            w = open(self.g2p.cache_path / f"{self.lang_id}.txt", 'a')
+        if (
+            len(self.cache_log) >= 100
+            and self.g2p.cache_path is not None
+            and self.g2p.cache_path.exists()
+        ):
+            w = open(self.g2p.cache_path / f"{self.lang_id}.txt", "a")
             for word, phonemes in self.cache_log.items():
                 w.write(f"{word}\t{' '.join(phonemes)}\n")
             w.close()
@@ -52,11 +56,11 @@ class BaseTokenizer:
     def tokenize(self, text: str):
         raise NotImplementedError
 
-    def tokenize_words(self, text:str):
+    def tokenize_words(self, text: str):
         """
         UNUSED
         """
-        text = text.translate(str.maketrans('', '', self.punctuation)).lower()
+        text = text.translate(str.maketrans("", "", self.punctuation)).lower()
 
         words = text.split()
         cleaned_words = [word for word in words if len(word) > 0]
@@ -64,7 +68,7 @@ class BaseTokenizer:
         return text.split()
 
     def convert_tokens_to_ids(self, lst):
-        lst = list(filter(lambda s: s!='<SPACE>', lst))
+        lst = list(filter(lambda s: s != "<SPACE>", lst))
 
         return self.inventory.phoneme.atoi(lst)
 
