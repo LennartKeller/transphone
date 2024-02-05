@@ -17,11 +17,11 @@ from transphone.model.vocab import Vocab
 from transphone.utils import Singleton
 
 
-def read_g2p(model_name="latest", device="cpu", checkpoint=None):
+def read_g2p(model_name="latest", device="cpu", jit=True, checkpoint=None):
 
     if device is not None:
         if isinstance(device, str):
-            assert device in ["cpu", "cuda", "jit"]
+            assert device in ["cpu", "cuda"]
         elif isinstance(device, int):
             if device == -1:
                 device = "cpu"
@@ -57,14 +57,14 @@ def read_g2p(model_name="latest", device="cpu", checkpoint=None):
 
     config = read_model_config(model_name)
 
-    model = G2P(checkpoint, cache_path, config, device)
+    model = G2P(checkpoint, cache_path, config, device, jit)
 
     return model
 
 
 class G2P(metaclass=Singleton):
 
-    def __init__(self, checkpoint, cache_path, config, device):
+    def __init__(self, checkpoint, cache_path, config, device, jit):
 
         self.model_path = Path(checkpoint).parent
         self.grapheme_vocab = Vocab.read(self.model_path / "grapheme.vocab")
@@ -73,6 +73,7 @@ class G2P(metaclass=Singleton):
         self.checkpoint = checkpoint
         self.cache_path = cache_path
         self.device = device
+        self.jit = jit
 
         # setup available languages
         self.supervised_langs = []
@@ -104,8 +105,7 @@ class G2P(metaclass=Singleton):
         NUM_DECODER_LAYERS = config.num_decoder
 
         torch.manual_seed(0)
-        if self.device != "jit":
-            self.jit_ = False
+        if not self.jit:
             self.model = TransformerG2P(
                 NUM_ENCODER_LAYERS,
                 NUM_DECODER_LAYERS,
@@ -117,8 +117,6 @@ class G2P(metaclass=Singleton):
             ).to(self.device)
             torch_load(self.model, self.checkpoint)
         else:
-            self.jit_ = True
-            self.device = "cpu"
             _model = JitTransformerG2P(
                 NUM_ENCODER_LAYERS,
                 NUM_DECODER_LAYERS,
@@ -127,9 +125,10 @@ class G2P(metaclass=Singleton):
                 SRC_VOCAB_SIZE,
                 TGT_VOCAB_SIZE,
                 FFN_HID_DIM,
-            ).to(self.device)
+            )
             torch_load(_model, self.checkpoint)
             self.model = torch.jit.script(_model)
+            self.model = self.model.to(device)
 
     def get_target_langs(
         self, lang_id, num_lang=10, verbose=False, force_approximate=False
@@ -195,7 +194,7 @@ class G2P(metaclass=Singleton):
                     continue
                 grapheme_ids.append(self.grapheme_vocab.atoi(grapheme))
 
-            if not self.jit_:
+            if not self.jit:
                 x = torch.LongTensor(grapheme_ids, device=self.device).unsqueeze(0)
 
                 phone_ids = self.model.inference(x)
@@ -283,7 +282,7 @@ class G2P(metaclass=Singleton):
                 print(f"normalized: {word} -> {normalized_graphemes}")
 
         x = torch.tensor(grapheme_input, dtype=torch.long, device=self.device)
-        if not self.jit_:
+        if not self.jit:
             phone_output = self.model.inference_batch(x).tolist()
         else:
             phone_output = self.model.transcribe(x).tolist()
