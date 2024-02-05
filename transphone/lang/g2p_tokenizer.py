@@ -3,9 +3,9 @@ from phonepiece.lexicon import read_lexicon
 from transphone.lang.base_tokenizer import BaseTokenizer
 
 
-def read_g2p_tokenizer(lang_id, g2p_model="latest", device=None):
+def read_g2p_tokenizer(lang_id, g2p_model="latest", device=None, jit=True):
     lang_id = normalize_lang_id(lang_id)
-    return G2PTokenizer(lang_id, g2p_model, device)
+    return G2PTokenizer(lang_id, g2p_model, device, jit)
 
 
 class G2PTokenizer(BaseTokenizer):
