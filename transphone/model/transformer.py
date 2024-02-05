@@ -180,7 +180,8 @@ class TransformerG2P(nn.Module):
         loss = self.criterion(logits.reshape(-1, logits.shape[-1]), tgt_out.reshape(-1))
 
         return loss
-
+    
+    @torch.no_grad
     def inference(self, src):
         self.eval()
         device = next(self.parameters()).device
@@ -210,6 +211,7 @@ class TransformerG2P(nn.Module):
 
         return out
 
+    @torch.no_grad
     def inference_batch(self, src):
         self.eval()
         device = next(self.parameters()).device

@@ -133,6 +133,7 @@ class JitTransformerG2P(nn.Module):
         )
 
     @torch.jit.export
+    @torch.no_grad
     def transcribe(self, grapheme_ids: torch.Tensor) -> torch.Tensor:
         device = grapheme_ids.device
 

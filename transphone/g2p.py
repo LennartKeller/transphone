@@ -244,7 +244,7 @@ class G2P(metaclass=Singleton):
             if verbose:
                 print(f"normalized: {word} -> {normalized_graphemes}")
 
-        x = torch.LongTensor(grapheme_input, device=self.device)
+        x = torch.tensor(grapheme_input, dtype=torch.long, device=self.device)
         if not self.onnx_:
             phone_output = self.model.inference_batch(x).tolist()
         else:
