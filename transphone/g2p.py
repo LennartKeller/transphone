@@ -17,11 +17,11 @@ from transphone.model.vocab import Vocab
 from transphone.utils import Singleton
 
 
-def read_g2p(model_name="latest", device="cpu", jit=True, checkpoint=None):
+def read_g2p(model_name="latest", device="cpu", jit=False, checkpoint=None):
 
     if device is not None:
         if isinstance(device, str):
-            assert device in ["cpu", "cuda"]
+            assert device in ["cpu", "cuda", "mps"]
         elif isinstance(device, int):
             if device == -1:
                 device = "cpu"

@@ -6,7 +6,7 @@ from transphone.g2p import read_g2p
 
 class BaseTokenizer:
 
-    def __init__(self, lang_id, g2p_model="latest", device=None, jit=True):
+    def __init__(self, lang_id, g2p_model="latest", device=None, jit=False):
         self.lang_id = lang_id
         self.inventory = read_inventory(lang_id)
 

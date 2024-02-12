@@ -1,18 +1,19 @@
-from transphone.utils import import_with_auto_install
-from transphone.lang.base_tokenizer import BaseTokenizer
 from phonepiece.pinyin import PinyinConverter
+
+from transphone.lang.base_tokenizer import BaseTokenizer
 from transphone.lang.cmn.normalizer import CMNNormalizer
+from transphone.utils import import_with_auto_install
 
 
-def read_cmn_tokenizer(lang_id='cmn', g2p_model='latest', device=None, use_lexicon=True):
+def read_cmn_tokenizer(lang_id='cmn', g2p_model='latest', device=None, use_lexicon=True, jit=False):
     return CMNTokenizer(lang_id, g2p_model, device)
 
 
 class CMNTokenizer(BaseTokenizer):
 
-    def __init__(self, lang_id='cmn', g2p_model='latest', device=None):
+    def __init__(self, lang_id='cmn', g2p_model='latest', device=None, jit=False):
 
-        super().__init__(lang_id, g2p_model, device)
+        super().__init__(lang_id, g2p_model, device, jit=jit)
 
         # import jieba and pypinyin for segmentation
         self.jieba = import_with_auto_install('jieba', 'jieba')

@@ -34,7 +34,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer("pos_embedding", pos_embedding)
 
     def forward(self, token_embeddings: torch.Tensor) -> torch.Tensor:
-        device = token_embeddings.device
+        device = self.pos_embedding.device
         batch_size, n_tokens, _ = token_embeddings.size()
         position_ids = torch.arange(n_tokens, dtype=torch.long, device=device).repeat(
             batch_size, 1
@@ -104,8 +104,10 @@ class JitTransformerG2P(nn.Module):
         tgt_padding_mask: torch.Tensor,
         memory_key_padding_mask: torch.Tensor,
     ):
-        src_emb = self.positional_encoding(self.src_tok_emb(src))
-        tgt_emb = self.positional_encoding(self.tgt_tok_emb(trg))
+        src_emb = self.src_tok_emb(src)
+        src_emb = self.positional_encoding(src_emb)
+        tgt_emb = self.tgt_tok_emb(trg)
+        tgt_emb = self.positional_encoding(tgt_emb)
         outs = self.transformer(
             src_emb,
             tgt_emb,
@@ -120,8 +122,12 @@ class JitTransformerG2P(nn.Module):
 
     @torch.jit.export
     def encode(self, src: torch.Tensor, src_mask: torch.Tensor) -> torch.Tensor:
+        print(1, src.device)
+        src = self.src_tok_emb(src)
+        print(2, src.device)
+        src = self.positional_encoding(src)
         return self.transformer.encoder(
-            self.positional_encoding(self.src_tok_emb(src)), src_mask
+            src, src_mask
         )
 
     @torch.jit.export

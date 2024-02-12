@@ -1,17 +1,19 @@
-from transphone.utils import import_with_auto_install
-from transphone.lang.base_tokenizer import BaseTokenizer
 from phonepiece.arpa import ArpaConverter
-from transphone.lang.eng.normalizer import ENGNormalizer
 
-def read_eng_tokenizer(lang_id='eng', g2p_model='latest', device=None, use_lexicon=True):
+from transphone.lang.base_tokenizer import BaseTokenizer
+from transphone.lang.eng.normalizer import ENGNormalizer
+from transphone.utils import import_with_auto_install
+
+
+def read_eng_tokenizer(lang_id='eng', g2p_model='latest', device=None, use_lexicon=True, jit=False):
     return ENGTokenizer(lang_id, g2p_model, device)
 
 
 class ENGTokenizer(BaseTokenizer):
 
-    def __init__(self, lang_id='eng', g2p_model='latest', device=None):
+    def __init__(self, lang_id='eng', g2p_model='latest', device=None, jit=False):
 
-        super().__init__(lang_id, g2p_model, device)
+        super().__init__(lang_id, g2p_model, device, jit=jit)
 
         # import jieba and pypinyin for segmentation
         cmudict_module = import_with_auto_install('cmudict', 'cmudict')

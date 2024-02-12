@@ -1,19 +1,21 @@
 """Basic Epitran class for G2P in most languages."""
+import csv
 import logging
 import os.path
+import re
 import sys
-import csv
 import unicodedata
 from collections import defaultdict
-from typing import DefaultDict, Callable  # pylint: disable=unused-import
-from phonepiece.epitran import read_epitran_g2p
-from phonepiece.lexicon import read_lexicon
-from phonepiece.inventory import read_inventory
-import re
-from transphone.lang.base_tokenizer import BaseTokenizer
-from epitran.ppprocessor import PrePostProcessor
-from phonepiece.ipa import read_ipa
+from typing import Callable, DefaultDict  # pylint: disable=unused-import
+
 import epitran
+from epitran.ppprocessor import PrePostProcessor
+from phonepiece.epitran import read_epitran_g2p
+from phonepiece.inventory import read_inventory
+from phonepiece.ipa import read_ipa
+from phonepiece.lexicon import read_lexicon
+
+from transphone.lang.base_tokenizer import BaseTokenizer
 
 logger = logging.getLogger('epitran')
 
@@ -122,7 +124,7 @@ raw_epitran_dict = {
 }
 
 
-def read_epitran_tokenizer(lang_id, g2p_model=None, device=None, use_lexicon=True):
+def read_epitran_tokenizer(lang_id, g2p_model=None, device=None, use_lexicon=True, jit=False):
     if lang_id in customized_epitran_dict:
         return read_customized_epitran_tokenizer(customized_epitran_dict[lang_id], use_lexicon)
     elif lang_id in raw_epitran_dict:
