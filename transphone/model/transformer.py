@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -53,11 +54,14 @@ class PositionalEncoding(nn.Module):
     def forward(self, token_embeddings: Tensor):
         device = token_embeddings.device
         batch_size, n_tokens, _ = token_embeddings.size()
-        position_ids = torch.arange(
-            n_tokens, dtype=torch.long, device=device).repeat(batch_size, 1)
-        # TODO Getting rid of the squeeze would require changing the pretrained weights, 
+        position_ids = torch.arange(n_tokens, dtype=torch.long, device=device).repeat(
+            batch_size, 1
+        )
+        # TODO Getting rid of the squeeze would require changing the pretrained weights,
         # and thus break back-compat...
-        position_embeddings = F.embedding(position_ids, weight=self.pos_embedding.squeeze(1))
+        position_embeddings = F.embedding(
+            position_ids, weight=self.pos_embedding.squeeze(1)
+        )
         positioned_embeddings = token_embeddings + position_embeddings
         positioned_embeddings = self.dropout(positioned_embeddings)
         return positioned_embeddings
@@ -128,9 +132,16 @@ class TransformerG2P(nn.Module):
         )
         return self.generator(outs)
 
-    def encode(self, src: Tensor, src_mask: Tensor):
+    def encode(
+        self,
+        src: Tensor,
+        src_mask: Optional[Tensor] = None,
+        src_key_padding_mask: Optional[Tensor] = None,
+    ):
         return self.transformer.encoder(
-            self.positional_encoding(self.src_tok_emb(src)), src_mask
+            self.positional_encoding(self.src_tok_emb(src)),
+            mask=src_mask,
+            src_key_padding_mask=src_key_padding_mask,
         )
 
     def decode(self, tgt: Tensor, memory: Tensor, tgt_mask: Tensor):
@@ -180,7 +191,7 @@ class TransformerG2P(nn.Module):
         loss = self.criterion(logits.reshape(-1, logits.shape[-1]), tgt_out.reshape(-1))
 
         return loss
-    
+
     @torch.no_grad
     def inference(self, src):
         self.eval()
@@ -195,9 +206,13 @@ class TransformerG2P(nn.Module):
         encoder_hidden_states = self.encode(src, src_mask)
 
         max_len = num_tokens + 5
-        ys = torch.full(size=(1, 1), fill_value=BOS_IDX, device=device, dtype=torch.long)
+        ys = torch.full(
+            size=(1, 1), fill_value=BOS_IDX, device=device, dtype=torch.long
+        )
         for _ in range(max_len - 1):
-            tgt_mask = self.transformer.generate_square_subsequent_mask(ys.size(1), device=device).bool()
+            tgt_mask = self.transformer.generate_square_subsequent_mask(
+                ys.size(1), device=device
+            ).bool()
             out = self.decode(ys, encoder_hidden_states, tgt_mask)
             probs = self.generator(out[:, -1, :])
             next_token_id = probs.argmax(dim=-1)
@@ -212,32 +227,31 @@ class TransformerG2P(nn.Module):
         return out
 
     @torch.no_grad
-    def inference_batch(self, src):
+    def inference_batch(self, src, src_mask=None, src_key_padding_mask=None):
         self.eval()
         device = next(self.parameters()).device
 
-        num_tokens = src.shape[1]
-        batch_size = src.shape[0]
+        batch_size, num_tokens = src.size()
+        if src_mask is None:
+            src_mask = torch.zeros(
+                size=(num_tokens, num_tokens), dtype=torch.bool, device=device
+            )
 
-        src_mask = torch.zeros(
-            size=(num_tokens, num_tokens),
-            dtype=torch.bool, device=device
-        )
         max_len = num_tokens + 5
-
-        encoder_hidden_states = self.encode(src, src_mask)
+        encoder_hidden_states = self.encode(src, src_mask, src_key_padding_mask)
 
         ys = src.new_ones(batch_size, 1).fill_(BOS_IDX)
         is_done = torch.zeros(size=(batch_size,), device=device)
         for _ in range(max_len - 1):
-            tgt_mask = self.transformer.generate_square_subsequent_mask(ys.size(1), device=device).bool()
+            tgt_mask = self.transformer.generate_square_subsequent_mask(
+                ys.size(1), device=device
+            ).bool()
             out = self.decode(ys, encoder_hidden_states, tgt_mask)
 
             probs = self.generator(out[:, -1, :])
             # (B,)
             next_words = probs.argmax(dim=-1)
-            
-            
+
             is_done[(next_words == EOS_IDX)] = 1
             next_words[is_done == 1] = EOS_IDX
 
