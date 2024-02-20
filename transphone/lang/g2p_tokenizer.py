@@ -1,5 +1,6 @@
 from phonepiece.lang import normalize_lang_id
 from phonepiece.lexicon import read_lexicon
+
 from transphone.lang.base_tokenizer import BaseTokenizer
 
 

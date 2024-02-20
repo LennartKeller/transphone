@@ -144,9 +144,18 @@ class TransformerG2P(nn.Module):
             src_key_padding_mask=src_key_padding_mask,
         )
 
-    def decode(self, tgt: Tensor, memory: Tensor, tgt_mask: Tensor):
+    def decode(
+        self,
+        tgt: Tensor,
+        memory: Tensor,
+        tgt_mask: Tensor,
+        memory_key_padding_mask: Optional[Tensor] = None,
+    ):
         return self.transformer.decoder(
-            self.positional_encoding(self.tgt_tok_emb(tgt)), memory, tgt_mask
+            self.positional_encoding(self.tgt_tok_emb(tgt)),
+            memory,
+            tgt_mask,
+            memory_key_padding_mask=memory_key_padding_mask,
         )
 
     def train_step(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -246,7 +255,12 @@ class TransformerG2P(nn.Module):
             tgt_mask = self.transformer.generate_square_subsequent_mask(
                 ys.size(1), device=device
             ).bool()
-            out = self.decode(ys, encoder_hidden_states, tgt_mask)
+            out = self.decode(
+                ys,
+                encoder_hidden_states,
+                tgt_mask,
+                memory_key_padding_mask=src_key_padding_mask,
+            )
 
             probs = self.generator(out[:, -1, :])
             # (B,)

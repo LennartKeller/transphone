@@ -6,8 +6,13 @@ from tokenizers.pre_tokenizers import Split
 from transformers import PreTrainedTokenizerFast
 
 # We can't remove '<', '>' during preprocessing because this destroys lang-tokens
+# PUNCTUATION_REGEX = (
+#     r"[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\:\;\=\?\@\[\\\]\^\_\`\{\|\}\~0123456789]"
+# )
+# In some languages (e.g. persian) numbers get romanized in latter stages of the pipeline and are transcribed
+# so we can't remove numbers in the tokenizer
 PUNCTUATION_REGEX = (
-    r"[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\:\;\=\?\@\[\\\]\^\_\`\{\|\}\~0123456789]"
+    r"[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\:\;\=\?\@\[\\\]\^\_\`\{\|\}\~]"
 )
 
 
